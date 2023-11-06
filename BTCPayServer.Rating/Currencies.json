@@ -1309,6 +1309,13 @@
       "crypto":true
    },
    {
+      "name":"Bits is the Standard!",
+      "code":"BITS",
+      "divisibility":100,
+      "symbol":"Bits",
+      "crypto":false
+   },
+   {
        "name": "Ethereum",
        "code": "ETH",
        "divisibility": 18,
