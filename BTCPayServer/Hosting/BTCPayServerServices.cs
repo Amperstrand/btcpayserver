@@ -518,6 +518,7 @@ namespace BTCPayServer.Hosting
             services.AddRateProvider<CoinGeckoRateProvider>();
             services.AddRateProvider<KrakenExchangeRateProvider>();
             services.AddRateProvider<ByllsRateProvider>();
+	    services.AddRateProvider<CustomRateProvider>();
             services.AddRateProvider<BudaRateProvider>();
             services.AddRateProvider<BitbankRateProvider>();
             services.AddRateProvider<BitpayRateProvider>();
