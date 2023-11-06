@@ -1311,8 +1311,8 @@
    {
       "name":"Bits is the Standard!",
       "code":"BITS",
-      "divisibility":100,
-      "symbol":"Bits",
+      "divisibility":0,
+      "symbol":null,
       "crypto":false
    },
    {
