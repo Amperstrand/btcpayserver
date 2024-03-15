@@ -27,7 +27,7 @@ public class OnChainWalletReportProvider : ReportProvider
     private StoreRepository StoreRepository { get; }
     private BTCPayNetworkProvider NetworkProvider { get; }
     private WalletRepository WalletRepository { get; }
-    public override string Name => "On-Chain Wallets";
+    public override string Name => "Wallets";
     ViewDefinition CreateViewDefinition()
     {
         return new()
@@ -120,7 +120,7 @@ public class OnChainWalletReportProvider : ReportProvider
     private string? GetAssetId(BTCPayNetwork network)
     {
 #if ALTCOINS
-        if (network is ElementsBTCPayNetwork elNetwork)
+        if (network is Plugins.Altcoins.ElementsBTCPayNetwork elNetwork)
         {
             if (elNetwork.CryptoCode == elNetwork.NetworkCryptoCode)
                 return "";

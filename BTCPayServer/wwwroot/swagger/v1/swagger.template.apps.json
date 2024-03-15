@@ -460,17 +460,37 @@
                                     "Print"
                                 ]
                             },
+                            "showItems": {
+                                "type": "boolean",
+                                "default": false,
+                                "description": "Display item selection for keypad",
+                                "example": true
+                            },
                             "showCustomAmount": {
                                 "type": "boolean",
                                 "description": "Whether the option to enter a custom amount is shown",
                                 "example": true
                             },
                             "showDiscount": {
+                                "default": false,
                                 "type": "boolean",
                                 "description": "Whether the option to enter a discount is shown",
                                 "example": false
                             },
+                            "showSearch": {
+                                "type": "boolean",
+                                "description": "Display the search bar",
+                                "example": false,
+                                "default": true
+                            },
+                            "showCategories": {
+                                "type": "boolean",
+                                "description": "Display the list of categories",
+                                "example": false,
+                                "default": true
+                            },
                             "enableTips": {
+                                "default": false,
                                 "type": "boolean",
                                 "description": "Whether the option to enter a tip is shown",
                                 "example": true
@@ -890,9 +910,6 @@
                         "type": "boolean",
                         "description": "Whether refund email is required when paying the invoice. Defaults to what is set in the store settings",
                         "nullable": true
-                    },
-                    "checkoutType": {
-                        "$ref": "#/components/schemas/CheckoutType"
                     },
                     "formId": {
                         "type": "string",

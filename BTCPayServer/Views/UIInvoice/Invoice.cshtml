@@ -169,7 +169,6 @@
     </div>
 }
 
-<div class="sticky-header-setup"></div>
 <div class="sticky-header d-flex flex-wrap gap-3 align-items-center justify-content-between">
     <h2 class="mb-0 text-break">@ViewData["Title"]</h2>
     <div class="d-flex flex-wrap gap-3 d-print-none">
@@ -518,7 +517,7 @@
                                     <span>@delivery.Type</span>
                                 </td>
                                 <td>
-                                    <span class="text-nowrap" data-bs-toggle="tooltip" title="@delivery.PayloadUrl" style="cursor: pointer;">
+                                    <span class="text-break" data-bs-toggle="tooltip" title="@delivery.PayloadUrl" style="cursor: pointer;">
                                         <span style="max-width: 250px;">@delivery.PayloadUrl</span>
                                     </span>
                                 </td>
@@ -578,7 +577,7 @@
                                     <span>@blob.Limit @blob.Currency</span>
                                 </td>
                                 <td>
-                                    <span> @refund.PullPaymentData.StartDate.ToBrowserDate() </span>
+                                    <span>@refund.PullPaymentData.StartDate.ToBrowserDate()</span>
                                 </td>
                             </tr>
                         }
@@ -599,9 +598,10 @@
             <tbody>
             @foreach (var evt in Model.Events)
             {
-                <tr class="text-@evt.GetCssClass()">
-                    <td>@evt.Timestamp.ToBrowserDate()</td>
-                    <td>@evt.Message</td>
+                var cssClass = string.IsNullOrEmpty(evt.GetCssClass()) ? null : $"text-{evt.GetCssClass()}";
+                <tr>
+                    <td class="@cssClass">@evt.Timestamp.ToBrowserDate("o", "short", "medium")</td>
+                    <td class="@cssClass">@evt.Message</td>
                 </tr>
             }
             </tbody>

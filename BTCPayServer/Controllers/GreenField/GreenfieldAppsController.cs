@@ -238,7 +238,7 @@ namespace BTCPayServer.Controllers.Greenfield
 
             return new CrowdfundSettings
             {
-                Title = request.Title?.Trim(),
+                Title = request.Title?.Trim() ?? request.AppName,
                 Enabled = request.Enabled ?? true,
                 EnforceTargetAmount = request.EnforceTargetAmount ?? false,
                 StartDate = request.StartDate?.UtcDateTime,
@@ -270,12 +270,15 @@ namespace BTCPayServer.Controllers.Greenfield
 
         private PointOfSaleSettings ToPointOfSaleSettings(CreatePointOfSaleAppRequest request)
         {
-            return new PointOfSaleSettings()
+            return new PointOfSaleSettings
             {
-                Title = request.Title,
+                Title = request.Title ?? request.AppName,
                 DefaultView = (PosViewType)request.DefaultView,
+                ShowItems = request.ShowItems,
                 ShowCustomAmount = request.ShowCustomAmount,
                 ShowDiscount = request.ShowDiscount,
+                ShowSearch = request.ShowSearch,
+                ShowCategories = request.ShowCategories,
                 EnableTips = request.EnableTips,
                 Currency = request.Currency,
                 Template = request.Template != null ? AppService.SerializeTemplate(AppService.Parse(request.Template)) : null,
@@ -289,8 +292,7 @@ namespace BTCPayServer.Controllers.Greenfield
                 EmbeddedCSS = request.EmbeddedCSS,
                 RedirectAutomatically = request.RedirectAutomatically,
                 RequiresRefundEmail = BoolToRequiresRefundEmail(request.RequiresRefundEmail) ?? RequiresRefundEmail.InheritFromStore,
-                FormId = request.FormId,
-                CheckoutType = request.CheckoutType ?? CheckoutType.V1
+                FormId = request.FormId
             };
         }
 
@@ -334,8 +336,11 @@ namespace BTCPayServer.Controllers.Greenfield
                 Created = appData.Created,
                 Title = settings.Title,
                 DefaultView = settings.DefaultView.ToString(),
+                ShowItems = settings.ShowItems,
                 ShowCustomAmount = settings.ShowCustomAmount,
                 ShowDiscount = settings.ShowDiscount,
+                ShowSearch = settings.ShowSearch,
+                ShowCategories = settings.ShowCategories,
                 EnableTips = settings.EnableTips,
                 Currency = settings.Currency,
                 Items = JsonConvert.DeserializeObject(

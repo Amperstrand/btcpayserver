@@ -13,6 +13,7 @@ using BTCPayServer.Controllers;
 using BTCPayServer.Data;
 using BTCPayServer.Filters;
 using BTCPayServer.Forms.Models;
+using BTCPayServer.Models;
 using BTCPayServer.Services.Stores;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
@@ -21,7 +22,7 @@ using Newtonsoft.Json.Linq;
 
 namespace BTCPayServer.Forms;
 
-[Authorize(Policy = Policies.CanModifyStoreSettings, AuthenticationSchemes = AuthenticationSchemes.Cookie)]
+[Authorize(Policy = Policies.CanViewStoreSettings, AuthenticationSchemes = AuthenticationSchemes.Cookie)]
 public class UIFormsController : Controller
 {
     private readonly FormDataService _formDataService;
@@ -47,6 +48,7 @@ public class UIFormsController : Controller
     }
 
     [HttpGet("~/stores/{storeId}/forms/new")]
+    [Authorize(Policy = Policies.CanModifyStoreSettings, AuthenticationSchemes = AuthenticationSchemes.Cookie)]
     public IActionResult Create(string storeId)
     {
         var vm = new ModifyForm { FormConfig = new Form().ToString() };
@@ -54,6 +56,7 @@ public class UIFormsController : Controller
     }
 
     [HttpGet("~/stores/{storeId}/forms/modify/{id}")]
+    [Authorize(Policy = Policies.CanModifyStoreSettings, AuthenticationSchemes = AuthenticationSchemes.Cookie)]
     public async Task<IActionResult> Modify(string storeId, string id)
     {
         var form = await _formDataService.GetForm(storeId, id);
@@ -65,6 +68,7 @@ public class UIFormsController : Controller
     }
 
     [HttpPost("~/stores/{storeId}/forms/modify/{id?}")]
+    [Authorize(Policy = Policies.CanModifyStoreSettings, AuthenticationSchemes = AuthenticationSchemes.Cookie)]
     public async Task<IActionResult> Modify(string storeId, string? id, ModifyForm modifyForm)
     {
         if (id is not null)
@@ -121,6 +125,7 @@ public class UIFormsController : Controller
     }
 
     [HttpPost("~/stores/{storeId}/forms/{id}/remove")]
+    [Authorize(Policy = Policies.CanModifyStoreSettings, AuthenticationSchemes = AuthenticationSchemes.Cookie)]
     public async Task<IActionResult> Remove(string storeId, string id)
     {
         await _formDataService.RemoveForm(id, storeId);
@@ -164,9 +169,7 @@ public class UIFormsController : Controller
             FormName = formData.Name,
             Form = form,
             StoreName = store?.StoreName,
-            BrandColor = storeBlob?.BrandColor,
-            CssFileId = storeBlob?.CssFileId,
-            LogoFileId = storeBlob?.LogoFileId,
+            StoreBranding = new StoreBrandingViewModel(storeBlob)
         });
     }
 

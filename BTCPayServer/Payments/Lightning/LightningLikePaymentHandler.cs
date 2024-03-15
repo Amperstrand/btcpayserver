@@ -61,7 +61,7 @@ namespace BTCPayServer.Payments.Lightning
 
             if (preparePaymentObject is null)
             {
-                return new LightningLikePaymentMethodDetails()
+                return new LightningLikePaymentMethodDetails
                 {
                     Activated = false
                 };
@@ -142,8 +142,14 @@ namespace BTCPayServer.Payments.Lightning
                 {
                     throw new PaymentMethodUnavailableException("The lightning node did not reply in a timely manner");
                 }
-                catch (NotSupportedException) when (isLndHub)
+                catch (NotSupportedException)
                 {
+                    // LNDhub, LNbits and others might not support this call, yet we can create invoices.
+                    return new NodeInfo[] {};
+                }
+                catch (UnauthorizedAccessException)
+                {
+                    // LND might return this with restricted macaroon, support this nevertheless..
                     return new NodeInfo[] {};
                 }
                 catch (Exception ex)
@@ -175,17 +181,7 @@ namespace BTCPayServer.Payments.Lightning
 
         public ILightningClient CreateLightningClient(LightningSupportedPaymentMethod supportedPaymentMethod, BTCPayNetwork network)
         {
-            var external = supportedPaymentMethod.GetExternalLightningUrl();
-            if (external != null)
-            {
-                return _lightningClientFactory.Create(external, network);
-            }
-            else
-            {
-                if (!Options.Value.InternalLightningByCryptoCode.TryGetValue(network.CryptoCode, out var connectionString))
-                    throw new PaymentMethodUnavailableException("No internal node configured");
-                return _lightningClientFactory.Create(connectionString, network);
-            }
+            return supportedPaymentMethod.CreateLightningClient(network, Options.Value, _lightningClientFactory);
         }
 
         public async Task TestConnection(NodeInfo nodeInfo, CancellationToken cancellation)
@@ -247,7 +243,7 @@ namespace BTCPayServer.Payments.Lightning
 
         public override CheckoutUIPaymentMethodSettings GetCheckoutUISettings()
         {
-            return new CheckoutUIPaymentMethodSettings()
+            return new CheckoutUIPaymentMethodSettings
             {
                 ExtensionPartial = "Lightning/LightningLikeMethodCheckout",
                 CheckoutBodyVueComponentName = "LightningLikeMethodCheckout",

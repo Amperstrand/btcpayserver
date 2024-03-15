@@ -7,6 +7,7 @@ using BTCPayServer.Abstractions.Contracts;
 using BTCPayServer.Abstractions.Services;
 using BTCPayServer.Configuration;
 using BTCPayServer.Payments;
+using BTCPayServer.Plugins.Altcoins;
 using BTCPayServer.Services.Altcoins.Monero.Configuration;
 using BTCPayServer.Services.Altcoins.Monero.Payments;
 using BTCPayServer.Services.Altcoins.Monero.Services;
@@ -52,11 +53,7 @@ namespace BTCPayServer.Services.Altcoins.Monero
             var btcPayNetworkProvider = serviceProvider.GetService<BTCPayNetworkProvider>();
             var result = new MoneroLikeConfiguration();
 
-            var supportedChains = configuration.GetOrDefault<string>("chains", string.Empty)
-                .Split(',', StringSplitOptions.RemoveEmptyEntries)
-                .Select(t => t.ToUpperInvariant());
-
-            var supportedNetworks = btcPayNetworkProvider.Filter(supportedChains.ToArray()).GetAll()
+            var supportedNetworks = btcPayNetworkProvider.GetAll()
                 .OfType<MoneroLikeSpecificBtcPayNetwork>();
 
             foreach (var moneroLikeSpecificBtcPayNetwork in supportedNetworks)
@@ -76,7 +73,7 @@ namespace BTCPayServer.Services.Altcoins.Monero
                 var daemonPassword =
                     configuration.GetOrDefault<string>(
                         $"{moneroLikeSpecificBtcPayNetwork.CryptoCode}_daemon_password", null);
-                if (daemonUri == null || walletDaemonUri == null)
+                if (daemonUri == null || walletDaemonUri == null || walletDaemonWalletDirectory == null)
                 {
                     throw new ConfigException($"{moneroLikeSpecificBtcPayNetwork.CryptoCode} is misconfigured");
                 }

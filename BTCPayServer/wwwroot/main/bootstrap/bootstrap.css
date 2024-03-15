@@ -12161,6 +12161,7 @@ fieldset:disabled .btn {
 
 *::-webkit-scrollbar {
   width: var(--btcpay-scrollbar-width);
+  height: var(--btcpay-scrollbar-width);
 }
 
 *::-webkit-scrollbar-track {
@@ -12252,6 +12253,10 @@ ul:not([class]) li {
 
 .text-secondary {
   color: var(--btcpay-body-text-muted) !important;
+}
+
+.text-warning {
+  color: rgba(var(--btcpay-body-text-warning-rgb), var(--btcpay-text-opacity)) !important;
 }
 
 /* Modals */

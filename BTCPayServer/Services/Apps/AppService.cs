@@ -15,6 +15,7 @@ using BTCPayServer.Plugins.PointOfSale.Models;
 using BTCPayServer.Services.Invoices;
 using BTCPayServer.Services.Rates;
 using BTCPayServer.Services.Stores;
+using Dapper;
 using Ganss.Xss;
 using Microsoft.EntityFrameworkCore;
 using NBitcoin;
@@ -44,23 +45,21 @@ namespace BTCPayServer.Services.Apps
         readonly CurrencyNameTable _Currencies;
         private readonly DisplayFormatter _displayFormatter;
         private readonly StoreRepository _storeRepository;
-        private readonly HtmlSanitizer _HtmlSanitizer;
         public CurrencyNameTable Currencies => _Currencies;
+
         public AppService(
             IEnumerable<AppBaseType> apps,
             ApplicationDbContextFactory contextFactory,
             InvoiceRepository invoiceRepository,
             CurrencyNameTable currencies,
             DisplayFormatter displayFormatter,
-            StoreRepository storeRepository,
-            HtmlSanitizer htmlSanitizer)
+            StoreRepository storeRepository)
         {
             _appTypes = apps.ToDictionary(a => a.Type, a => a);
             _ContextFactory = contextFactory;
             _InvoiceRepository = invoiceRepository;
             _Currencies = currencies;
             _storeRepository = storeRepository;
-            _HtmlSanitizer = htmlSanitizer;
             _displayFormatter = displayFormatter;
         }
 #nullable enable
@@ -77,13 +76,13 @@ namespace BTCPayServer.Services.Apps
 
         public async Task<object?> GetInfo(string appId)
         {
-            var appData = await GetApp(appId, null);
+            var appData = await GetApp(appId, null, includeStore: true);
             if (appData is null)
                 return null;
             var appType = GetAppType(appData.AppType);
             if (appType is null)
                 return null;
-            return appType.GetInfo(appData);
+            return await appType.GetInfo(appData);
         }
 
         public async Task<IEnumerable<ItemStats>> GetItemStats(AppData appData)
@@ -253,6 +252,7 @@ namespace BTCPayServer.Services.Apps
         public async Task<ListAppsViewModel.ListAppViewModel[]> GetAllApps(string? userId, bool allowNoUser = false, string? storeId = null, bool includeArchived = false)
         {
             await using var ctx = _ContextFactory.CreateContext();
+            var types = GetAvailableAppTypes().Select(at => at.Key).ToHashSet();
             var listApps = (await ctx.UserStore
                 .Where(us =>
                     (allowNoUser && string.IsNullOrEmpty(userId) || us.ApplicationUserId == userId) &&
@@ -260,7 +260,7 @@ namespace BTCPayServer.Services.Apps
                 .Include(store => store.StoreRole)
                 .Include(store => store.StoreData)
                 .Join(ctx.Apps, us => us.StoreDataId, app => app.StoreDataId, (us, app) => new { us, app })
-                .Where(b => !b.app.Archived || b.app.Archived == includeArchived)
+                .Where(b => types.Contains(b.app.AppType) && (!b.app.Archived || b.app.Archived == includeArchived))
                 .OrderBy(b => b.app.Created)
                 .ToArrayAsync()).Select(arg => new ListAppsViewModel.ListAppViewModel
             {
@@ -311,9 +311,10 @@ namespace BTCPayServer.Services.Apps
         public async Task<List<AppData>> GetApps(string[] appIds, bool includeStore = false, bool includeArchived = false)
         {
             await using var ctx = _ContextFactory.CreateContext();
+            var types = GetAvailableAppTypes().Select(at => at.Key);
             var query = ctx.Apps
                 .Where(app => appIds.Contains(app.Id))
-                .Where(app => !app.Archived || app.Archived == includeArchived);
+                .Where(app => types.Contains(app.AppType) && (!app.Archived || app.Archived == includeArchived));
             if (includeStore)
             {
                 query = query.Include(data => data.StoreData);
@@ -332,9 +333,10 @@ namespace BTCPayServer.Services.Apps
         public async Task<AppData?> GetApp(string appId, string? appType, bool includeStore = false, bool includeArchived = false)
         {
             await using var ctx = _ContextFactory.CreateContext();
+            var types = GetAvailableAppTypes().Select(at => at.Key);
             var query = ctx.Apps
                 .Where(us => us.Id == appId && (appType == null || us.AppType == appType))
-                .Where(app => !app.Archived || app.Archived == includeArchived);
+                .Where(app => types.Contains(app.AppType) && (!app.Archived || app.Archived == includeArchived));
             if (includeStore)
             {
                 query = query.Include(data => data.StoreData);
@@ -366,15 +368,81 @@ namespace BTCPayServer.Services.Apps
                 return null;
             await using var ctx = _ContextFactory.CreateContext();
             var app = await ctx.UserStore
-                            .Include(store => store.StoreRole)
-                            .Where(us => us.ApplicationUserId == userId && us.StoreRole.Permissions.Contains(Policies.CanModifyStoreSettings))
-                            .SelectMany(us => us.StoreData.Apps.Where(a => a.Id == appId))
-               .FirstOrDefaultAsync();
+                .Include(store => store.StoreRole)
+                .Where(us => us.ApplicationUserId == userId && us.StoreRole.Permissions.Contains(Policies.CanModifyStoreSettings))
+                .SelectMany(us => us.StoreData.Apps.Where(a => a.Id == appId))
+                .FirstOrDefaultAsync();
             if (app == null)
                 return null;
             if (type != null && type != app.AppType)
                 return null;
             return app;
+        }
+
+        public async Task<AppData?> GetAppData(string userId, string appId, string? type = null)
+        {
+            if (userId == null || appId == null)
+                return null;
+            await using var ctx = _ContextFactory.CreateContext();
+            var app = await ctx.UserStore
+                .Where(us => us.ApplicationUserId == userId && us.StoreData != null && us.StoreData.UserStores.Any(u => u.ApplicationUserId == userId))
+                .SelectMany(us => us.StoreData.Apps.Where(a => a.Id == appId))
+                .FirstOrDefaultAsync();
+            if (app == null)
+                return null;
+            if (type != null && type != app.AppType)
+                return null;
+            return app;
+        }
+
+        record AppSettingsWithXmin(string apptype, string settings, uint xmin);
+        public record InventoryChange(string ItemId, int Delta);
+        public async Task UpdateInventory(string appId, InventoryChange[] changes)
+        {
+            await using var ctx = _ContextFactory.CreateContext();
+            // We use xmin to make sure we don't override changes made by another process
+retry:
+            var connection = ctx.Database.GetDbConnection();
+            var row = connection.QueryFirstOrDefault<AppSettingsWithXmin>(
+                "SELECT \"AppType\" AS apptype, \"Settings\" AS settings, xmin FROM \"Apps\" WHERE \"Id\"=@appId", new { appId }
+                );
+            if (row?.settings is null)
+                return;
+            var templatePath = row.apptype switch
+            {
+                CrowdfundAppType.AppType => "PerksTemplate",
+                _ => "Template"
+            };
+            var settings = JObject.Parse(row.settings);
+            if (!settings.TryGetValue(templatePath, out var template))
+                return;
+
+            var items = template.Type switch
+            {
+                JTokenType.String => JArray.Parse(template.Value<string>()!),
+                JTokenType.Array => (JArray)template,
+                _ => null
+            };
+            if (items is null)
+                return;
+            bool hasChange = false;
+            foreach (var change in changes)
+            {
+                var item = items.FirstOrDefault(i => i["id"]?.Value<string>() == change.ItemId && i["inventory"]?.Type is JTokenType.Integer);
+                if (item is null)
+                    continue;
+                var inventory = item["inventory"]!.Value<int>();
+                inventory += change.Delta;
+                item["inventory"] = inventory;
+                hasChange = true;
+            }
+            if (!hasChange)
+                return;
+            settings[templatePath] = items.ToString(Formatting.None);
+            var updated = await connection.ExecuteAsync("UPDATE \"Apps\" SET \"Settings\"=@v::JSONB WHERE \"Id\"=@appId AND xmin=@xmin", new { appId, xmin = (int)row.xmin, v = settings.ToString(Formatting.None) }) == 1;
+            // If we can't update, it means someone else updated the row, so we need to retry
+            if (!updated)
+                goto retry;
         }
 
         public async Task UpdateOrCreateApp(AppData app)

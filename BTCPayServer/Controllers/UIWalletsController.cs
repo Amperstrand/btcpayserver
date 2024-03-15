@@ -32,6 +32,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.DependencyInjection;
 using NBitcoin;
 using NBXplorer;
@@ -47,6 +48,8 @@ namespace BTCPayServer.Controllers
     [Route("wallets")]
     [Authorize(Policy = Policies.CanModifyStoreSettings, AuthenticationSchemes = AuthenticationSchemes.Cookie)]
     [AutoValidateAntiforgeryToken]
+    //16mb psbts
+    [RequestFormLimits(ValueLengthLimit = FormReader.DefaultValueLengthLimit * 4)]
     public partial class UIWalletsController : Controller
     {
         private StoreRepository Repository { get; }
@@ -66,6 +69,7 @@ namespace BTCPayServer.Controllers
         private readonly DelayedTransactionBroadcaster _broadcaster;
         private readonly PayjoinClient _payjoinClient;
         private readonly LabelService _labelService;
+        private readonly TransactionLinkProviders _transactionLinkProviders;
         private readonly PullPaymentHostedService _pullPaymentHostedService;
         private readonly WalletHistogramService _walletHistogramService;
 
@@ -89,10 +93,12 @@ namespace BTCPayServer.Controllers
                                  PayjoinClient payjoinClient,
                                  IServiceProvider serviceProvider,
                                  PullPaymentHostedService pullPaymentHostedService,
-                                 LabelService labelService)
+                                 LabelService labelService,
+                                 TransactionLinkProviders transactionLinkProviders)
         {
             _currencyTable = currencyTable;
             _labelService = labelService;
+            _transactionLinkProviders = transactionLinkProviders;
             Repository = repo;
             WalletRepository = walletRepository;
             RateFetcher = rateProvider;
@@ -143,7 +149,6 @@ namespace BTCPayServer.Controllers
                 return NotFound();
 
             var txObjId = new WalletObjectId(walletId, WalletObjectData.Types.Tx, transactionId);
-            var wallet = _walletProvider.GetWallet(paymentMethod.Network);
             if (addlabel != null)
             {
                 await WalletRepository.AddWalletObjectLabels(txObjId, addlabel);
@@ -248,12 +253,12 @@ namespace BTCPayServer.Controllers
             }
             else
             {
+                var pmi = new PaymentMethodId(walletId.CryptoCode, PaymentTypes.BTCLike);
                 foreach (var tx in transactions)
                 {
                     var vm = new ListTransactionsViewModel.TransactionViewModel();
                     vm.Id = tx.TransactionId.ToString();
-                    vm.Link = string.Format(CultureInfo.InvariantCulture, paymentMethod.Network.BlockExplorerLink,
-                        vm.Id);
+                    vm.Link = _transactionLinkProviders.GetTransactionLink(pmi, vm.Id);
                     vm.Timestamp = tx.SeenAt;
                     vm.Positive = tx.BalanceChange.GetValue(wallet.Network) >= 0;
                     vm.Balance = tx.BalanceChange.ShowMoney(wallet.Network);
@@ -411,7 +416,6 @@ namespace BTCPayServer.Controllers
             await ExplorerClientProvider.GetExplorerClient(walletId.CryptoCode).WaitServerStartedAsync();
             await Task.Delay(1000);
             await using var conn = await factory.OpenConnection();
-            var wallet_id = paymentMethod.GetNBXWalletId();
 
             var txIds = sending.Select(s => s.Result.ToString()).ToArray();
             await conn.ExecuteAsync(
@@ -435,7 +439,7 @@ namespace BTCPayServer.Controllers
         {
             if (walletId?.StoreId == null)
                 return NotFound();
-            var store = await Repository.FindStore(walletId.StoreId, GetUserId());
+            var store = await Repository.FindStore(walletId.StoreId);
             var paymentMethod = GetDerivationSchemeSettings(walletId);
             if (paymentMethod == null || store is null)
                 return NotFound();
@@ -509,11 +513,9 @@ namespace BTCPayServer.Controllers
 
             await Task.WhenAll(recommendedFees);
             model.RecommendedSatoshiPerByte =
-                recommendedFees.Select(tuple => tuple.Result).Where(option => option != null).ToList();
+                recommendedFees.Select(tuple => tuple.GetAwaiter().GetResult()).Where(option => option != null).ToList();
 
-            model.FeeSatoshiPerByte = model.RecommendedSatoshiPerByte.LastOrDefault()?.FeeRate;
-            model.SupportRBF = network.SupportRBF;
-
+            model.FeeSatoshiPerByte = recommendedFees[1].GetAwaiter().GetResult()?.FeeRate;
             model.CryptoDivisibility = network.Divisibility;
             using (CancellationTokenSource cts = new CancellationTokenSource())
             {
@@ -562,14 +564,13 @@ namespace BTCPayServer.Controllers
         {
             if (walletId?.StoreId == null)
                 return NotFound();
-            var store = await Repository.FindStore(walletId.StoreId, GetUserId());
+            var store = await Repository.FindStore(walletId.StoreId);
             if (store == null)
                 return NotFound();
             var network = NetworkProvider.GetNetwork<BTCPayNetwork>(walletId.CryptoCode);
             if (network == null || network.ReadonlyWallet)
                 return NotFound();
 
-            vm.SupportRBF = network.SupportRBF;
             vm.NBXSeedAvailable = await GetSeed(walletId, network) != null;
             if (!string.IsNullOrEmpty(bip21))
             {
@@ -590,7 +591,7 @@ namespace BTCPayServer.Controllers
 
                 var utxos = await _walletProvider.GetWallet(network)
                     .GetUnspentCoins(schemeSettings.AccountDerivation, false, cancellation);
-
+                var pmi = new PaymentMethodId(vm.CryptoCode, PaymentTypes.BTCLike);
                 var walletTransactionsInfoAsync = await this.WalletRepository.GetWalletTransactionsInfo(walletId,
                     utxos.SelectMany(GetWalletObjectsQuery.Get).Distinct().ToArray());
                 vm.InputsAvailable = utxos.Select(coin =>
@@ -605,8 +606,7 @@ namespace BTCPayServer.Controllers
                         Amount = coin.Value.GetValue(network),
                         Comment = info?.Comment,
                         Labels = _labelService.CreateTransactionTagModels(info, Request),
-                        Link = string.Format(CultureInfo.InvariantCulture, network.BlockExplorerLink,
-                            coin.OutPoint.Hash.ToString()),
+                        Link = _transactionLinkProviders.GetTransactionLink(pmi, coin.OutPoint.ToString()),
                         Confirmations = coin.Confirmations
                     };
                 }).ToArray();
@@ -1348,7 +1348,7 @@ namespace BTCPayServer.Controllers
             {
                 "csv" => "text/csv",
                 "json" => "application/json",
-                "bip329" => "text/jsonl", // https://stackoverflow.com/questions/59938644/what-is-the-mime-type-of-jsonl-files
+                "bip329" => "application/jsonl", // Ongoing discussion: https://github.com/wardi/jsonlines/issues/19
                 _ => throw new ArgumentOutOfRangeException(nameof(format), format, null)
             };
             var cd = new ContentDisposition
@@ -1473,7 +1473,7 @@ namespace BTCPayServer.Controllers
             return Request.GetRelativePathOrAbsolute(res);
         }
 
-        private string GetUserId() => _userManager.GetUserId(User);
+        private string GetUserId() => _userManager.GetUserId(User)!;
 
         private StoreData GetCurrentStore() => HttpContext.GetStoreData();
     }

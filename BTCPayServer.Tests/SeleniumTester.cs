@@ -1,5 +1,4 @@
 using System;
-using System.ComponentModel;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -9,6 +8,7 @@ using BTCPayServer.Abstractions.Models;
 using BTCPayServer.Client.Models;
 using BTCPayServer.Lightning;
 using BTCPayServer.Lightning.CLightning;
+using BTCPayServer.Services;
 using BTCPayServer.Views.Manage;
 using BTCPayServer.Views.Server;
 using BTCPayServer.Views.Stores;
@@ -77,6 +77,7 @@ namespace BTCPayServer.Tests
                     // A bit less than test timeout
                     TimeSpan.FromSeconds(50));
             }
+
             ServerUri = Server.PayTester.ServerUri;
             Driver.Manage().Window.Maximize();
 
@@ -89,7 +90,6 @@ namespace BTCPayServer.Tests
 
         public void PayInvoice(bool mine = false, decimal? amount = null)
         {
-
             if (amount is not null)
             {
                 Driver.FindElement(By.Id("test-payment-amount")).Clear();
@@ -97,6 +97,10 @@ namespace BTCPayServer.Tests
             }
             Driver.WaitUntilAvailable(By.Id("FakePayment"));
             Driver.FindElement(By.Id("FakePayment")).Click();
+            TestUtils.Eventually(() =>
+            {
+                Driver.WaitForElement(By.Id("CheatSuccessMessage"));
+            });
             if (mine)
             {
                 MineBlockOnInvoiceCheckout();
@@ -105,8 +109,15 @@ namespace BTCPayServer.Tests
 
         public void MineBlockOnInvoiceCheckout()
         {
-            Driver.FindElement(By.CssSelector("#mine-block button")).Click();
-
+            retry:
+            try
+            {
+                Driver.FindElement(By.CssSelector("#mine-block button")).Click();
+            }
+            catch (StaleElementReferenceException)
+            {
+                goto retry;
+            }
         }
 
         /// <summary>
@@ -278,7 +289,7 @@ namespace BTCPayServer.Tests
         /// </summary>
         /// <param name="cryptoCode"></param>
         /// <param name="derivationScheme"></param>
-        public void AddDerivationScheme(string cryptoCode = "BTC", string derivationScheme = "xpub661MyMwAqRbcGABgHMUXDzPzH1tU7eZaAaJQXhDXsSxsqyQzQeU6kznNfSuAyqAK9UaWSaZaMFdNiY5BCF4zBPAzSnwfUAwUhwttuAKwfRX-[legacy]")
+        public void AddDerivationScheme(string cryptoCode = "BTC", string derivationScheme = "tpubD6NzVbkrYhZ4XxNXjYTcRujMc8z8734diCthtFGgDMimbG5hUsKBuSTCuUyxWL7YwP7R4A5StMTRQiZnb6vE4pdHWPgy9hbiHuVJfBMumUu-[legacy]")
         {
             if (!Driver.PageSource.Contains($"Setup {cryptoCode} Wallet"))
             {
@@ -295,17 +306,12 @@ namespace BTCPayServer.Tests
 
         public void AddLightningNode()
         {
-            AddLightningNode(null, null, true);
+            AddLightningNode(null, true);
         }
 
-        public void AddLightningNode(LightningConnectionType? connectionType = null, bool test = true)
+        public void AddLightningNode(string connectionType = null, bool test = true)
         {
-            AddLightningNode(null, connectionType, test);
-        }
-
-        public void AddLightningNode(string cryptoCode = null, LightningConnectionType? connectionType = null, bool test = true)
-        {
-            cryptoCode ??= "BTC";
+            var cryptoCode = "BTC";
             if (!Driver.PageSource.Contains("Connect to a Lightning node"))
             {
                 GoToLightningSettings();
@@ -637,6 +643,39 @@ retry:
             {
                 Driver.FindElement(By.Id($"SectionNav-{navPages}")).Click();
             }
+        }
+
+        public void AddUserToStore(string storeId, string email, string role)
+        {
+            if (Driver.FindElements(By.Id("AddUser")).Count == 0)
+            {
+                GoToStore(storeId, StoreNavPages.Users);
+            }
+            Driver.FindElement(By.Id("Email")).SendKeys(email);
+            new SelectElement(Driver.FindElement(By.Id("Role"))).SelectByValue(role);
+            Driver.FindElement(By.Id("AddUser")).Click();
+            Assert.Contains("User added successfully", FindAlertMessage().Text);
+        }
+        
+        public void AssertPageAccess(bool shouldHaveAccess, string url)
+        {
+            GoToUrl(url);
+            Assert.DoesNotMatch("404 - Page not found</h", Driver.PageSource);
+            if (shouldHaveAccess)
+                Assert.DoesNotMatch("- Denied</h", Driver.PageSource);
+            else
+                Assert.Contains("- Denied</h", Driver.PageSource);
+        }
+
+        public (string appName, string appId) CreateApp(string type, string name = null)
+        {
+            if (string.IsNullOrEmpty(name)) name = $"{type}-{Guid.NewGuid().ToString()[..14]}";
+            Driver.FindElement(By.Id($"StoreNav-Create{type}")).Click();
+            Driver.FindElement(By.Name("AppName")).SendKeys(name);
+            Driver.FindElement(By.Id("Create")).Click();
+            Assert.Contains("App successfully created", FindAlertMessage().Text);
+            var appId = Driver.Url.Split('/')[4];
+            return (name, appId);
         }
     }
 }

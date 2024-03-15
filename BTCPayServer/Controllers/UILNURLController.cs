@@ -90,9 +90,13 @@ namespace BTCPayServer
             _pluginHookService = pluginHookService;
             _invoiceActivator = invoiceActivator;
         }
-
         [HttpGet("withdraw/pp/{pullPaymentId}")]
-        public async Task<IActionResult> GetLNURLForPullPayment(string cryptoCode, string pullPaymentId, string pr, CancellationToken cancellationToken)
+        public Task<IActionResult> GetLNURLForPullPayment(string cryptoCode, string pullPaymentId, [FromQuery] string pr, CancellationToken cancellationToken)
+        {
+            return GetLNURLForPullPayment(cryptoCode, pullPaymentId, pr, pullPaymentId, cancellationToken);
+        }
+        [NonAction]
+        internal async Task<IActionResult> GetLNURLForPullPayment(string cryptoCode, string pullPaymentId, string pr, string k1, CancellationToken cancellationToken)
         {
             var network = _btcPayNetworkProvider.GetNetwork<BTCPayNetwork>(cryptoCode);
             if (network is null || !network.SupportLightning)
@@ -119,7 +123,7 @@ namespace BTCPayServer
             var request = new LNURLWithdrawRequest
             {
                 MaxWithdrawable = LightMoney.FromUnit(remaining, unit),
-                K1 = pullPaymentId,
+                K1 = k1,
                 BalanceCheck = new Uri(Request.GetCurrentUrl()),
                 CurrentBalance = LightMoney.FromUnit(remaining, unit),
                 MinWithdrawable =
@@ -369,7 +373,7 @@ namespace BTCPayServer
             if (string.IsNullOrEmpty(username))
                 return NotFound("Unknown username");
             
-            LNURLPayRequest lnurlRequest = null;
+            LNURLPayRequest lnurlRequest;
             
             // Check core and fall back to lookup Lightning Address via plugins
             var lightningAddressSettings = await _lightningAddressService.ResolveByAddress(username);

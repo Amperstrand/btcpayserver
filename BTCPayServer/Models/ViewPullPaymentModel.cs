@@ -34,10 +34,6 @@ namespace BTCPayServer.Models
             ExpiryDate = data.EndDate is DateTimeOffset dt ? (DateTime?)dt.UtcDateTime : null;
             Email = blob.View.Email;
             MinimumClaim = blob.MinimumClaim;
-            EmbeddedCSS = blob.View.EmbeddedCSS;
-            CustomCSSLink = blob.View.CustomCSSLink;
-            if (!string.IsNullOrEmpty(EmbeddedCSS))
-                EmbeddedCSS = $"<style>{EmbeddedCSS}</style>";
             IsPending = !data.IsExpired();
             var period = data.GetPeriod(now);
             if (data.Archived)
@@ -75,6 +71,9 @@ namespace BTCPayServer.Models
 
         public PaymentMethodId[] PaymentMethods { get; set; }
 
+        public string SetupDeepLink { get; set; }
+        public string ResetDeepLink { get; set; }
+
         public string HubPath { get; set; }
         public string ResetIn { get; set; }
         public string Email { get; set; }
@@ -91,15 +90,12 @@ namespace BTCPayServer.Models
         public DateTime? ExpiryDate { get; set; }
         public string Title { get; set; }
         public string Description { get; set; }
-        public string BrandColor { get; set; }
-        public string CssFileId { get; set; }
-        public string EmbeddedCSS { get; set; }
-        public string CustomCSSLink { get; set; }
         public List<PayoutLine> Payouts { get; set; } = new();
         public DateTimeOffset StartDate { get; set; }
         public DateTime LastRefreshed { get; set; }
         public CurrencyData CurrencyData { get; set; }
         public Uri LnurlEndpoint { get; set; }
+        public StoreBrandingViewModel StoreBranding { get; set; }
         public bool Archived { get; set; }
         public bool AutoApprove { get; set; }
 

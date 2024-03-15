@@ -1,6 +1,7 @@
 #if ALTCOINS
 using BTCPayServer.Client.Models;
 using BTCPayServer.Payments;
+using BTCPayServer.Plugins.Altcoins;
 using BTCPayServer.Services.Altcoins.Monero.Utils;
 using BTCPayServer.Services.Invoices;
 
@@ -15,6 +16,7 @@ namespace BTCPayServer.Services.Altcoins.Monero.Payments
         public long BlockHeight { get; set; }
         public long ConfirmationCount { get; set; }
         public string TransactionId { get; set; }
+        public long? InvoiceSettledConfirmationThreshold { get; set; }
 
         public BTCPayNetworkBase Network { get; set; }
         public long LockTime { get; set; } = 0;
@@ -47,6 +49,12 @@ namespace BTCPayServer.Services.Altcoins.Monero.Payments
             {
                 return false;
             }
+
+            if (InvoiceSettledConfirmationThreshold.HasValue)
+            {
+                return ConfirmationCount >= InvoiceSettledConfirmationThreshold;
+            }
+
             switch (speedPolicy)
             {
                 case SpeedPolicy.HighSpeed:

@@ -9,6 +9,7 @@ using BTCPayServer.Logging;
 using BTCPayServer.Models;
 using BTCPayServer.Models.InvoicingModels;
 using BTCPayServer.Payments;
+using BTCPayServer.Plugins.Altcoins;
 using BTCPayServer.Rating;
 using BTCPayServer.Services.Altcoins.Monero.RPC.Models;
 using BTCPayServer.Services.Altcoins.Monero.Services;
@@ -58,6 +59,7 @@ namespace BTCPayServer.Services.Altcoins.Monero.Payments
                 AccountIndex = supportedPaymentMethod.AccountIndex,
                 AddressIndex = address.AddressIndex,
                 DepositAddress = address.Address,
+                InvoiceSettledConfirmationThreshold = supportedPaymentMethod.InvoiceSettledConfirmationThreshold,
                 Activated = true
             };
 
