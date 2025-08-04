@@ -178,7 +178,13 @@ namespace BTCPayServer.Hosting
             mvcBuilder.AddRazorRuntimeCompilation();
 #endif
 
-            services.AddServerSideBlazor();
+
+            services.AddServerSideBlazor().AddHubOptions(o =>
+            {
+                // PSBT with previous transactions could become
+                // easily too big to get signed without this.
+                o.MaximumReceiveMessageSize = BlazorMaximumReceiveMessageSize;
+            });
 
             LowercaseTransformer.Register(services);
             ValidateControllerNameTransformer.Register(services);
@@ -237,6 +243,9 @@ namespace BTCPayServer.Hosting
                 });
             }
         }
+
+        public const long BlazorMaximumReceiveMessageSize = 5_000_000;
+
         public void Configure(
             IApplicationBuilder app,
             IWebHostEnvironment env,
@@ -359,17 +368,6 @@ namespace BTCPayServer.Hosting
             // https://andrewlock.net/adding-cache-control-headers-to-static-files-in-asp-net-core/
             const int durationInSeconds = 60 * 60 * 24 * 365;
             ctx.Context.Response.Headers[HeaderNames.CacheControl] = "public,max-age=" + durationInSeconds;
-        }
-
-        private static Action<Microsoft.AspNetCore.StaticFiles.StaticFileResponseContext> NewMethod()
-        {
-            return ctx =>
-            {
-                // Cache static assets for one year, set asp-append-version="true" on references to update on change.
-                // https://andrewlock.net/adding-cache-control-headers-to-static-files-in-asp-net-core/
-                const int durationInSeconds = 60 * 60 * 24 * 365;
-                ctx.Context.Response.Headers[HeaderNames.CacheControl] = "public,max-age=" + durationInSeconds;
-            };
         }
     }
 }
